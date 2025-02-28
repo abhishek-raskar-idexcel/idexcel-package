@@ -1,0 +1,88 @@
+name: PR Commit Message Linting
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          # Fetch full history to ensure all commits of this PR branch are available
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Fetch PR Branch History
+        run: |
+          # Check if the repo is shallow and fetch full history if needed
+          if [ -f .git/shallow ]; then
+            echo "🔄 Repository is shallow, fetching full history..."
+            git fetch --unshallow
+          else
+            echo "✅ Repository is already fully cloned"
+          fi
+
+          # Fetch the latest commits for the PR branch
+          git fetch origin ${{ github.event.pull_request.head.ref }}
+          echo "✅ Fetched latest commits for branch: ${{ github.event.pull_request.head.ref }}"
+
+      - name: Determine Commits in PR Branch
+        run: |
+          # Find the base commit where the PR branch diverged from the main branch
+          BASE_COMMIT=$(git merge-base origin/${{ github.event.pull_request.base.ref }} origin/${{ github.event.pull_request.head.ref }})
+
+          # Safety check: Ensure BASE_COMMIT is found
+          if [ -z "$BASE_COMMIT" ]; then
+            echo "❌ Error: No common ancestor found between the branches."
+            exit 1
+          fi
+
+          echo "📌 Base commit: $BASE_COMMIT"
+
+          # Get all commits in the PR branch since it diverged from base
+          COMMITS=$(git rev-list $BASE_COMMIT..origin/${{ github.event.pull_request.head.ref }})
+
+          # Safety check: Ensure there are commits to check
+          if [ -z "$COMMITS" ]; then
+            echo "⚠️ Warning: No new commits found in the PR branch. Nothing to check."
+            exit 0
+          fi
+
+          echo "✅ Commits to check:"
+          echo "$COMMITS"
+
+          # Store commits in a file so they can be read in the next step
+          echo "$COMMITS" > commits_to_check.txt
+
+      - name: Run Commitlint on Each Commit
+        run: |
+          # Read the commit list from the file
+          while IFS= read -r commit; do
+            echo "🔍 Checking commit: $commit"
+
+            # Get commit message
+            MESSAGE=$(git log --format=%B -n 1 $commit | tr -d '\n')
+
+            echo "📜 Commit Message: \"$MESSAGE\""
+
+            # Run commitlint for the specific commit
+            if echo "$MESSAGE" | npx commitlint; then
+              echo "✅ Commit $commit PASSED commitlint check!"
+            else
+              echo "❌ Commit $commit FAILED commitlint check!"
+              echo "🚨 Commit message is not following the required format!"
+              exit 1
+            fi
+          done < commits_to_check.txt
+
+      - name: Success Message
+        if: success()
+        run: echo "🎉 All commits in this PR branch passed commitlint checks!"

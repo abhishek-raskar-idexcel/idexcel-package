@@ -1,0 +1,77 @@
+name: PR Commit Message Linting
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Configure npm to use private registry
+        run: |
+          npm config set @idexcel-technologies-pvt-ltd:registry https://npm.pkg.github.com/
+          npm config set //npm.pkg.github.com/:_authToken=${{secrets.GH_PAT}}
+      - name: Install Dependencies
+        run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GH_PAT}}
+
+      - name: Fetch PR Branch History
+        run: |
+          if [ -f .git/shallow ]; then
+            echo "🔄 Repository is shallow, fetching full history..."
+            git fetch --unshallow
+          else
+            echo "✅ Repository is already fully cloned"
+          fi
+          git fetch origin ${{ github.event.pull_request.head.ref }}
+          echo "✅ Fetched latest commits for branch: ${{ github.event.pull_request.head.ref }}"
+
+      - name: Determine Commits in PR Branch
+        run: |
+          BASE_COMMIT=$(git merge-base origin/${{ github.event.pull_request.base.ref }} origin/${{ github.event.pull_request.head.ref }})
+          if [ -z "$BASE_COMMIT" ]; then
+            echo "❌ Error: No common ancestor found between the branches."
+            exit 1
+          fi
+          echo "📌 Base commit: $BASE_COMMIT"
+          COMMITS=$(git rev-list $BASE_COMMIT..origin/${{ github.event.pull_request.head.ref }})
+          if [ -z "$COMMITS" ]; then
+            echo "⚠️ Warning: No new commits found in the PR branch. Nothing to check."
+            exit 0
+          fi
+          echo "✅ Commits to check:"
+          echo "$COMMITS"
+          echo "$COMMITS" > commits_to_check.txt
+
+      - name: Run Commitlint on Each Commit
+        run: |
+          while IFS= read -r commit; do
+            echo "🔍 Checking commit: $commit"
+            MESSAGE=$(git log --format=%B -n 1 $commit | tr -d '\n')
+            echo "📜 Commit Message: \"$MESSAGE\""
+            if echo "$MESSAGE" | npx commitlint; then
+              echo "✅ Commit $commit PASSED commitlint check!"
+            else
+              echo "❌ Commit $commit FAILED commitlint check!"
+              echo "🚨 Commit message is not following the required format!"
+              exit 1
+            fi
+          done < commits_to_check.txt
+
+      - name: Success Message
+        if: success()
+        run: echo "🎉 All commits in this PR branch passed commitlint checks!"
+        

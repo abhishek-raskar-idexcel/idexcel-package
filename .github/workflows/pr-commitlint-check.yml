@@ -74,3 +74,4 @@ jobs:
       - name: Success Message
         if: success()
         run: echo "🎉 All commits in this PR branch passed commitlint checks!"
+        

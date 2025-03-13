@@ -4,7 +4,7 @@ module.exports = {
       headerPattern: /^(\S+)?: (\S+)-(\S+) (\S(?:.*\S)?)$/,
       headerCorrespondence: [
         "type",
-        "ticketKey",
+        "projectKey",
         "ticketNumber",
         "description",
       ],
@@ -17,7 +17,7 @@ module.exports = {
           const headerPattern = /^(\S+)?: (\S+)-(\S+) (\S(?:.*\S)?)$/;
           if (!headerPattern.test(parsed.header)) {
             throw new Error(
-              '❌ Invalid commit message format!(check for any extra whitespace character.) Expected format: "type: ticketKey-ticketNumber description'
+              '❌ Invalid commit message format!(check for any extra whitespace character.) Expected format: "type: projectKey-ticketNumber description"'
             );
           }
           return [true];
@@ -39,16 +39,16 @@ module.exports = {
           }
           return [true];
         },
-        "ticket-key-format": (parsed, _when, expectedValues) => {
-          const { ticketKey } = parsed;
-          if (ticketKey.length > expectedValues) {
+        "project-key-format": (parsed, _when, expectedValues) => {
+          const { projectKey } = parsed;
+          if (projectKey.length > expectedValues) {
             return [
               false,
-              `❌ ticketKey length must be atmost ${expectedValues} characters. The current length is ${ticketKey.length} characters`,
+              `❌ projectKey length must be at most ${expectedValues} characters. The current length is ${projectKey.length} characters`,
             ];
           }
-          if (!parsed.ticketKey || !/^[A-Z]+$/.test(parsed.ticketKey)) {
-            return [false, "❌ ticketKey must be uppercase letters only."];
+          if (!parsed.projectKey || !/^[A-Z]+$/.test(parsed.projectKey)) {
+            return [false, "❌ projectKey must be uppercase letters only."];
           }
           return [true];
         },
@@ -119,7 +119,7 @@ module.exports = {
         "wip",
       ],
     ],
-    "ticket-key-format": [2, "always", 10],
+    "project-key-format": [2, "always", 10],
     "ticket-number-format": [2, "always"],
     "description-min-length": [2, "always", 10],
     "description-max-length": [2, "always", 50],
